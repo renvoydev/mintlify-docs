@@ -28,29 +28,31 @@
       "url": "https://paywall.renvoy.ai"
     }
   ],
-  "navigation": [
-    {
-      "group": "Overview",
-      "pages": ["index", "what-is-x402", "why-managed"]
-    },
-    {
-      "group": "Getting Started",
-      "pages": ["getting-started", "plans-and-pricing"]
-    },
-    {
-      "group": "Integration",
-      "pages": [
-        "integration/index",
-        "integration/server",
-        "integration/client",
-        "integration/agent"
-      ]
-    },
-    {
-      "group": "Reference",
-      "pages": ["api-reference", "erc8004", "demo"]
-    }
-  ],
+  "navigation": {
+    "groups": [
+      {
+        "group": "Overview",
+        "pages": ["index", "what-is-x402", "why-managed"]
+      },
+      {
+        "group": "Getting Started",
+        "pages": ["getting-started", "plans-and-pricing"]
+      },
+      {
+        "group": "Integration",
+        "pages": [
+          "integration/index",
+          "integration/server",
+          "integration/client",
+          "integration/agent"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": ["api-reference", "erc8004", "demo"]
+      }
+    ]
+  },
   "footerSocials": {
     "x": "https://x.com/raborym",
     "github": "https://github.com/renvoy"
