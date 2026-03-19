@@ -49,7 +49,7 @@
       },
       {
         "group": "Reference",
-        "pages": ["api-reference", "erc8004", "demo"]
+        "pages": ["reference", "erc8004", "demo"]
       }
     ]
   },
