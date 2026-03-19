@@ -1,4 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0D9373"/>
-  <text x="16" y="23" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="white" text-anchor="middle">R</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <defs>
+    <clipPath id="clipCircle" clipPathUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="12"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="12" cy="12" r="12" fill="#2563EB"/>
+
+  <g clip-path="url(#clipCircle)">
+    <!-- wedge -->
+    <rect x="3" y="12" width="12.7279" height="12.7279" rx="2"
+          transform="rotate(-45 3 12)" fill="#fff"/>
+    <rect x="7" y="12" width="7.0711" height="7.0711"
+          transform="rotate(-45 7 12)" fill="#2563EB"/>
+
+    <!-- center spine: integer-aligned -->
+    <rect x="10" y="1" width="4" height="22" rx="1" fill="#2563EB"/>
+
+    <!-- seam pills: extend outward only, integer-aligned -->
+    <rect x="11" y="-2" width="2" height="12" rx="1" fill="#fff"/>
+    <rect x="11" y="14" width="2" height="12" rx="1" fill="#fff"/>
+  </g>
 </svg>
