@@ -1,0 +1,45 @@
+---
+title: Live Demo
+description: See x402 payments in action with the paywall demo.
+---
+
+See x402 payments in action at [paywall.renvoy.ai](https://paywall.renvoy.ai).
+
+## What the demo does
+
+The paywall demo lets you create a temporary paywall and share it with anyone. Visitors pay USDC to access the content behind it.
+
+## How to use it
+
+<Steps>
+  <Step title="Go to paywall.renvoy.ai">
+    Visit [paywall.renvoy.ai](https://paywall.renvoy.ai)
+  </Step>
+  <Step title="Create a paywall">
+    Set a price, add your content, and provide your wallet address
+  </Step>
+  <Step title="Get a shareable URL">
+    Each paywall gets a unique link
+  </Step>
+  <Step title="Share it">
+    Anyone with the link can pay to access your content
+  </Step>
+  <Step title="Receive USDC">
+    Payments go directly to your wallet on Base or Solana
+  </Step>
+</Steps>
+
+## What's happening under the hood
+
+When a visitor clicks "Pay":
+
+1. The demo server responds with `402 Payment Required` and the price you set
+2. The visitor's wallet signs a USDC transfer authorization
+3. The facilitator (Renvoy sandbox) settles the payment on-chain
+4. The demo server unlocks the content
+
+The full x402 flow — from 402 response to on-chain settlement — happens in a few seconds.
+
+## Try it yourself
+
+The demo uses the sandbox facilitator and supports both Base Sepolia and Solana Devnet, so no real money is involved. You'll need testnet USDC in a wallet — get some from the [Circle faucet](https://faucet.circle.com/) (supports both Base Sepolia and Solana Devnet).

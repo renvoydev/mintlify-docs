@@ -1,0 +1,220 @@
+---
+title: Server Integration
+description: Add pay-per-request USDC payments to your API endpoints.
+---
+
+## Express.js
+
+### Install
+
+```bash
+npm install @x402/express @x402/evm @x402/core
+```
+
+For Solana support, also install `@x402/svm`:
+
+```bash
+npm install @x402/svm
+```
+
+### Minimal example (EVM)
+
+```typescript
+import express from "express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+
+const app = express();
+
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: process.env.FACILITATOR_URL!,
+});
+
+app.use(
+  paymentMiddleware(
+    {
+      "GET /weather": {
+        accepts: [
+          {
+            scheme: "exact",
+            price: "$0.10",
+            network: "eip155:8453",           // Base mainnet
+            payTo: process.env.EVM_ADDRESS!,  // your wallet
+          },
+        ],
+        description: "Weather data",
+        mimeType: "application/json",
+      },
+    },
+    new x402ResourceServer(facilitatorClient)
+      .register("eip155:8453", new ExactEvmScheme()),
+  ),
+);
+
+app.get("/weather", (req, res) => {
+  res.json({ weather: "sunny", temperature: 70 });
+});
+
+app.listen(4021);
+```
+
+### Minimal example (Solana)
+
+```typescript
+import express from "express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { ExactSvmScheme } from "@x402/svm/exact/server";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+
+const app = express();
+
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: process.env.FACILITATOR_URL!,
+});
+
+app.use(
+  paymentMiddleware(
+    {
+      "GET /weather": {
+        accepts: [
+          {
+            scheme: "exact",
+            price: "$0.10",
+            network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",  // Solana mainnet
+            payTo: process.env.SOLANA_ADDRESS!,                    // your wallet
+          },
+        ],
+        description: "Weather data",
+        mimeType: "application/json",
+      },
+    },
+    new x402ResourceServer(facilitatorClient)
+      .register("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", new ExactSvmScheme()),
+  ),
+);
+
+app.get("/weather", (req, res) => {
+  res.json({ weather: "sunny", temperature: 70 });
+});
+
+app.listen(4021);
+```
+
+### Configuration
+
+The `paymentMiddleware` takes a route map and a resource server:
+
+```typescript
+paymentMiddleware(routes, resourceServer)
+```
+
+**Routes** map `"METHOD /path"` to payment requirements:
+
+```typescript
+{
+  "GET /endpoint": {
+    accepts: [{
+      scheme: "exact",            // payment scheme
+      price: "$0.10",             // human-readable price
+      network: "eip155:8453",     // CAIP-2 network ID
+      payTo: "0x...",             // your receiving address
+    }],
+    description: "Endpoint description",
+    mimeType: "application/json",
+  }
+}
+```
+
+**Network identifiers** use [CAIP-2](https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md) format:
+- `eip155:8453` — Base mainnet
+- `eip155:84532` — Base Sepolia (testnet)
+- `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` — Solana mainnet
+- `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` — Solana Devnet
+
+### Facilitator URL
+
+| Environment | URL |
+|---|---|
+| Sandbox (free, testnet) | `https://x402.renvoy.ai/sandbox` |
+| Production (API key) | `https://x402.renvoy.ai/v1/YOUR_API_KEY` |
+
+## Any framework
+
+If you're not using Express, you can implement the 402 flow directly. The protocol is framework-agnostic.
+
+### What your server does
+
+1. **Check for payment**: Look for the `X-PAYMENT` header on incoming requests
+2. **No payment?** Return `402` with payment requirements in the response body
+3. **Has payment?** Forward it to the facilitator's `/settle` endpoint for on-chain settlement
+4. **Settlement succeeds?** Return the requested resource
+
+### 402 response format
+
+When a request arrives without payment, respond with:
+
+```
+HTTP/1.1 402 Payment Required
+Content-Type: application/json
+```
+
+```json
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "maxAmountRequired": "100000",
+      "resource": "https://api.example.com/data",
+      "description": "API access",
+      "mimeType": "application/json",
+      "payTo": "0xYourAddress",
+      "maxTimeoutSeconds": 60,
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "extra": {
+        "name": "USD Coin",
+        "version": "2"
+      }
+    }
+  ]
+}
+```
+
+`maxAmountRequired` is in USDC atomic units (6 decimals). `"100000"` = 0.10 USDC.
+
+### Settle request
+
+Forward the client's `X-PAYMENT` header to the facilitator:
+
+```
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/settle
+Content-Type: application/json
+```
+
+```json
+{
+  "paymentPayload": "<base64-encoded payment from X-PAYMENT header>",
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "maxAmountRequired": "100000",
+    "resource": "https://api.example.com/data",
+    "payTo": "0xYourAddress",
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "extra": { "name": "USD Coin", "version": "2" }
+  }
+}
+```
+
+### Settle response
+
+```json
+{
+  "success": true,
+  "transaction": "0xabc123...",
+  "network": "eip155:8453",
+  "payer": "0xClientAddress"
+}
+```

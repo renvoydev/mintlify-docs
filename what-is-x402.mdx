@@ -1,0 +1,49 @@
+---
+title: What is x402?
+description: HTTP 402 Payment Required — a standard protocol for machine-to-machine USDC payments over HTTP.
+---
+
+## The problem
+
+Traditional payment flows — credit cards, invoices, subscription billing — require human identity, legal agreements, and manual onboarding. They work for people, but they break for machines.
+
+AI agents can't get credit cards. Automated pipelines can't sign contracts. And micropayments under $1 aren't viable when card processing fees start at $0.30.
+
+## HTTP 402: Payment Required
+
+HTTP has had a status code for this since 1997: **402 Payment Required**. It was reserved "for future use" — and the future is now.
+
+The [x402 protocol](https://www.x402.org/) defines a standard way to use 402 responses for real payments:
+
+1. **Client** requests a resource
+2. **Server** responds with `402` and a `payment-required` header describing the price, network, and payment address
+3. **Client** signs a USDC transfer authorization (no on-chain transaction yet)
+4. **Client** retries the request with the signed payment in the `X-PAYMENT` header
+5. **Facilitator** verifies the signature, submits the transaction on-chain, and confirms settlement
+6. **Server** returns the resource
+
+No signup. No API keys on the client side. No invoices. Just HTTP.
+
+## What is a facilitator?
+
+The facilitator is the settlement engine. It:
+
+- **Verifies** that the signed payment is valid (correct amount, correct recipient, sufficient balance)
+- **Settles** the payment on-chain by submitting the transaction to the network
+- **Returns** the transaction hash and settlement confirmation
+
+The facilitator never holds funds. It submits the client's pre-signed transfer directly to the USDC contract. The merchant receives USDC in their wallet.
+
+## Supported networks
+
+| Network | CAIP-2 ID | Status |
+|---|---|---|
+| Base (mainnet) | `eip155:8453` | Production |
+| Base Sepolia (testnet) | `eip155:84532` | Sandbox / Testing |
+| Solana (mainnet) | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Production |
+| Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Sandbox / Testing |
+
+## Learn more
+
+- [x402 Protocol Specification](https://www.x402.org/)
+- [Getting Started](/getting-started) — try it in 2 minutes

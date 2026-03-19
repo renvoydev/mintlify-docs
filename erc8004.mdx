@@ -1,0 +1,76 @@
+---
+title: ERC-8004 Agent Tracking
+description: Renvoy automatically detects ERC-8004 agent NFTs on payer wallets and links them to settlement history.
+---
+
+## What is ERC-8004?
+
+[ERC-8004](https://www.8004scan.io/) defines a standard for on-chain autonomous agents represented as ERC-721 NFTs. Each agent has a unique token ID, an owner wallet, and optional metadata (name, image).
+
+Renvoy automatically detects when a payer wallet holds ERC-8004 agent NFTs and links those agents to settlement history. This lets you see which AI agents are making payments through your endpoints.
+
+## How it works
+
+When a settlement succeeds through Renvoy:
+
+1. The payer wallet address is extracted from the settlement response
+2. Renvoy queries [8004scan](https://www.8004scan.io/) to check if that wallet owns any ERC-8004 agent NFTs
+3. If agents are found, they are stored and attached to settlement history entries
+4. Agent info appears in history responses and in the dashboard UI
+
+This happens automatically in the background. It does not affect settlement speed or reliability — if the 8004scan lookup fails, settlement proceeds normally.
+
+## Supported networks
+
+Agent detection works on all networks supported by 8004scan:
+
+| Network | CAIP-2 ID | 8004scan |
+|---|---|---|
+| Base (mainnet) | `eip155:8453` | [base](https://www.8004scan.io/agents/base) |
+| Base Sepolia | `eip155:84532` | [base-sepolia](https://www.8004scan.io/agents/base-sepolia) |
+| Solana (mainnet) | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | [solana](https://www.8004scan.io/agents/solana) |
+| Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | [solana-devnet](https://www.8004scan.io/agents/solana-devnet) |
+
+## Agents in settlement history
+
+When agents are detected, they appear in the `agents` array on each settlement entry in history responses:
+
+```json
+{
+  "settlements": [
+    {
+      "created_at": "2026-03-13T15:30:00.000Z",
+      "success": true,
+      "tx_hash": "0xabc...",
+      "payer": "0x7764b53582a12e0538de181ea67e15d49ec0e79f",
+      "agents": [
+        {
+          "token_id": "42",
+          "name": "Autonomous Trader",
+          "url": "https://www.8004scan.io/agents/base/42"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Each agent entry contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `token_id` | string | The ERC-721 token ID of the agent NFT |
+| `name` | string or null | Human-readable agent name (from NFT metadata) |
+| `url` | string | Link to the agent's profile on 8004scan |
+
+If the payer wallet has no agents, the `agents` field is omitted.
+
+Agents appear in all history endpoints:
+
+- `GET /api/me/history` (merchant, JWT auth)
+- `GET /api/v1/agent/history` (agent, SIWE auth)
+- `GET /admin/history` (admin)
+
+## Dashboard
+
+The Renvoy dashboard shows agent badges on each settlement row. Click an agent badge to view its full profile on 8004scan.

@@ -1,0 +1,215 @@
+---
+title: Agent Self-Provisioning
+description: AI agents can provision their own facilitator endpoint by paying USDC — no signup, no dashboard, no human in the loop.
+---
+
+## How it works
+
+1. Agent sends a GET request to discover payment requirements
+2. Agent signs a USDC payment and sends it via the x402 protocol
+3. Agent receives an API key and endpoint URL
+4. Agent uses the endpoint for settlements, just like any other plan
+5. Agent can top up credits anytime by repeating step 2
+
+## Credit model
+
+| Parameter | Value |
+|---|---|
+| Credit price | 0.001 USDC per credit |
+| Minimum purchase | 0.01 USDC (10 credits) |
+| 1 credit = | 1 settlement |
+| Verifications | 10 per credit |
+| Expiration | Credits never expire |
+| API keys | One per wallet |
+| RPS | 50 requests per second |
+
+## API
+
+### Discover payment requirements
+
+```
+GET https://x402.renvoy.ai/api/v1/agent/purchase
+```
+
+Returns `402` with payment requirements:
+
+```json
+{
+  "x402Version": 1,
+  "accepts": [{
+    "scheme": "exact",
+    "network": "base",
+    "maxAmountRequired": "100000",
+    "resource": "https://x402.renvoy.ai/api/v1/agent/purchase",
+    "description": "Purchase facilitator settlement credits. Min 10000 atomic units (10 credits).",
+    "payTo": "0xTreasuryAddress",
+    "maxTimeoutSeconds": 60,
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  }]
+}
+```
+
+Use this to discover the treasury address, minimum amount, and asset contract before constructing a payment.
+
+### Purchase credits
+
+```
+POST https://x402.renvoy.ai/api/v1/agent/purchase
+X-PAYMENT: <base64-encoded payment payload>
+```
+
+The `X-PAYMENT` header contains the signed USDC transfer, encoded as base64 JSON. Pay more than the minimum to get more credits (amount / 0.001 USDC = credits).
+
+**Success response** (`200`):
+
+```json
+{
+  "endpoint": "https://x402.renvoy.ai/v1/YOUR_API_KEY/",
+  "api_key": "YOUR_API_KEY",
+  "credits": {
+    "total": 100,
+    "used": 0,
+    "remaining": 100
+  },
+  "wallet": "0xYourWallet",
+  "owner_id": "uuid",
+  "tx": "0xTransactionHash"
+}
+```
+
+**Without `X-PAYMENT` header**: Returns `402` (same as GET).
+
+**Duplicate transaction**: Returns `409` if the same transaction hash has already been processed.
+
+### Check balance (SIWE)
+
+```
+GET https://x402.renvoy.ai/api/v1/agent/balance
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+Requires [SIWE (Sign-In with Ethereum)](https://eips.ethereum.org/EIPS/eip-4361) authentication. The SIWE message must:
+- Have a `domain` matching `x402.renvoy.ai`
+- Include an `expirationTime` (messages without expiry are rejected)
+- Be signed by the wallet that purchased credits
+
+**Response** (`200`):
+
+```json
+{
+  "wallet": "0xYourWallet",
+  "endpoint": "https://x402.renvoy.ai/v1/YOUR_API_KEY/",
+  "api_key": "YOUR_API_KEY",
+  "credits": {
+    "total": 100,
+    "used": 23,
+    "remaining": 77
+  },
+  "verify": {
+    "total": 1000,
+    "used": 5,
+    "remaining": 995
+  },
+  "plan": "agent"
+}
+```
+
+### Configure allowed networks (SIWE)
+
+```
+PATCH https://x402.renvoy.ai/api/v1/agent/config
+Content-Type: application/json
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+```json
+{
+  "allowed_networks": ["eip155:8453", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"]
+}
+```
+
+Restricts which networks your endpoint will accept payments on. Set to `null` to allow all supported networks (Base, Base Sepolia, Solana, Solana Devnet).
+
+You can also toggle settlement history logging:
+
+```json
+{
+  "history_enabled": false
+}
+```
+
+**Response** (`200`):
+
+```json
+{
+  "wallet": "0xYourWallet",
+  "tenant_id": "uuid",
+  "allowed_networks": ["eip155:8453", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
+  "history_enabled": true
+}
+```
+
+### Settlement history (SIWE)
+
+```
+GET https://x402.renvoy.ai/api/v1/agent/history?limit=50
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+Returns paginated settlement history for your agent account.
+
+**Query parameters:** `limit` (1-100, default 50), `cursor` (opaque, from previous response), `direction` (`before` or `after`).
+
+**Response** (`200`):
+
+```json
+{
+  "settlements": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "success": true,
+      "tx_hash": "0xabc...",
+      "network": "eip155:84532",
+      "payer_amount": "1000",
+      "payer": "0xClientAddress",
+      "resource": "https://api.example.com/data",
+      "plan": "agent",
+      "error_reason": null
+    }
+  ],
+  "cursor": "OPAQUE_CURSOR",
+  "has_more": false
+}
+```
+
+## Using your endpoint
+
+Once provisioned, use your endpoint exactly like any other plan:
+
+```
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/settle
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/verify
+```
+
+When credits are exhausted, settle and verify requests return `429` with:
+
+```
+x-settlement-remaining: 0
+```
+
+Top up by sending another payment to the purchase endpoint.
+
+## Error responses
+
+| Status | Meaning |
+|---|---|
+| `400` | Invalid payment payload or below minimum amount |
+| `401` | Missing or invalid SIWE authentication |
+| `402` | Payment required (expected — use this to get payment requirements) |
+| `404` | No agent account found for this wallet |
+| `409` | Duplicate transaction (already processed) |
+| `429` | Credits exhausted |
+| `503` | Agent provisioning not configured |

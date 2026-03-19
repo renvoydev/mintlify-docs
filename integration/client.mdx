@@ -1,0 +1,153 @@
+---
+title: Client Integration
+description: Pay for x402-protected API endpoints using USDC.
+---
+
+## Prerequisites
+
+- A wallet with USDC on the target network (Base, Base Sepolia, Solana, or Solana Devnet)
+- The wallet's private key (for signing payments)
+
+## Using `@x402/fetch`
+
+The `@x402/fetch` package wraps the standard `fetch` API to automatically handle 402 responses — detecting payment requirements, signing the USDC transfer, and retrying the request.
+
+### Install
+
+```bash
+npm install @x402/fetch @x402/evm viem
+```
+
+### Minimal example
+
+```typescript
+import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
+
+// Create a signer from your private key
+const signer = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
+
+// Set up the x402 client with EVM payment support
+const client = new x402Client();
+registerExactEvmScheme(client, { signer });
+
+// Wrap fetch to auto-handle 402 responses
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+// Use it like normal fetch — payments are handled automatically
+const response = await fetchWithPayment("https://api.example.com/data");
+const data = await response.json();
+```
+
+### How it works
+
+1. `fetchWithPayment` makes the initial request
+2. If the server returns `402`, the wrapper reads the payment requirements from the response
+3. It signs a USDC transfer authorization using your wallet
+4. It retries the request with the signed payment in the `X-PAYMENT` header
+5. The server settles the payment via the facilitator and returns the data
+
+No manual header construction. No base64 encoding. The wrapper handles everything.
+
+### Reading the payment response
+
+After a successful payment, the server includes settlement details in the `PAYMENT-RESPONSE` header:
+
+```typescript
+import { x402Client, wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
+
+const signer = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
+const client = new x402Client();
+registerExactEvmScheme(client, { signer });
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+const response = await fetchWithPayment("https://api.example.com/data");
+
+if (response.ok) {
+  const paymentResponse = new x402HTTPClient(client).getPaymentSettleResponse(
+    name => response.headers.get(name),
+  );
+  console.log("Transaction:", paymentResponse.transaction);
+}
+```
+
+## Raw integration (without `@x402/fetch`)
+
+If you can't use the wrapper, handle the 402 flow manually:
+
+### 1. Make the initial request
+
+```bash
+curl -i https://api.example.com/data
+```
+
+### 2. Parse the 402 response
+
+The response body contains payment requirements:
+
+```json
+{
+  "x402Version": 1,
+  "accepts": [{
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "maxAmountRequired": "1000",
+    "resource": "https://api.example.com/data",
+    "description": "API access",
+    "mimeType": "application/json",
+    "payTo": "0xMerchantAddress",
+    "maxTimeoutSeconds": 60,
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "extra": { "name": "USD Coin", "version": "2" }
+  }]
+}
+```
+
+### 3. Sign the payment
+
+Construct and sign a USDC `transferWithAuthorization` (EIP-3009) or `permit` + `transferFrom` authorization matching the requirements.
+
+### 4. Retry with the payment
+
+Base64-encode the signed payment payload and include it in the `X-PAYMENT` header:
+
+```bash
+curl -H "X-PAYMENT: <base64-encoded-payment>" https://api.example.com/data
+```
+
+The server will settle the payment via the facilitator and return the data.
+
+## Solana client
+
+For Solana, use the `@x402/svm` package instead of `@x402/evm`:
+
+### Install
+
+```bash
+npm install @x402/fetch @x402/svm @solana/web3.js
+```
+
+### Example
+
+```typescript
+import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { registerExactSvmScheme } from "@x402/svm/exact/client";
+import { Keypair } from "@solana/web3.js";
+
+// Create a signer from your private key
+const signer = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(process.env.SOLANA_PRIVATE_KEY!)));
+
+// Set up the x402 client with Solana payment support
+const client = new x402Client();
+registerExactSvmScheme(client, { signer });
+
+// Wrap fetch to auto-handle 402 responses
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+// Use it like normal fetch — payments are handled automatically
+const response = await fetchWithPayment("https://api.example.com/data");
+const data = await response.json();
+```

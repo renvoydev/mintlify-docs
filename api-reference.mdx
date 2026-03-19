@@ -1,0 +1,441 @@
+---
+title: API Reference
+description: Complete API reference for Renvoy's facilitator endpoints.
+---
+
+Base URL: `https://x402.renvoy.ai`
+
+## Core endpoints
+
+These are the two endpoints your server calls to process payments:
+
+### `POST /settle`
+
+Settle a payment on-chain. Submits the client's signed USDC transfer to the network.
+
+**Request:**
+
+```json
+{
+  "paymentPayload": "<base64-encoded signed payment>",
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "maxAmountRequired": "100000",
+    "resource": "https://api.example.com/data",
+    "payTo": "0xMerchantAddress",
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "extra": { "name": "USD Coin", "version": "2" }
+  }
+}
+```
+
+**Response (`200`):**
+
+```json
+{
+  "success": true,
+  "transaction": "0xabc123...",
+  "network": "eip155:8453",
+  "payer": "0xClientAddress"
+}
+```
+
+### `POST /verify`
+
+Verify a payment signature without settling. Checks that the signed payment is valid (correct amount, recipient, sufficient balance) but does not submit it on-chain.
+
+**Request:** Same format as `/settle`.
+
+**Response (`200`):**
+
+```json
+{
+  "isValid": true
+}
+```
+
+## Path prefixes
+
+The path prefix determines authentication and which facilitator tier handles the request:
+
+### `/sandbox/...`
+
+No authentication. IP-based rate limiting. Base Sepolia and Solana Devnet (testnets).
+
+```
+POST https://x402.renvoy.ai/sandbox/settle
+POST https://x402.renvoy.ai/sandbox/verify
+```
+
+- 1,000 settlements / 5,000 verifications per month per IP
+- 5 RPS per IP
+- Minimum payment: 0.0001 USDC
+
+### `/v1/<key>/...`
+
+API key authentication. Routes to the facilitator tier matching your plan.
+
+```
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/settle
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/verify
+```
+
+### `/v1/<key>/flash/...`
+
+Same as above, but routes to the Flashblocks facilitator for ~200ms settlement. Requires Growth plan or higher.
+
+```
+POST https://x402.renvoy.ai/v1/YOUR_API_KEY/flash/settle
+```
+
+## Utility endpoints
+
+### `GET /health`
+
+Health check. No authentication.
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /supported`
+
+Returns supported networks and assets. No authentication.
+
+### `GET /`
+
+Redirects to `https://www.renvoy.ai`. This is not an API endpoint.
+
+## Discovery
+
+### `GET /discovery/resources`
+
+Returns a catalog of x402-enabled resources discovered from successful settlements. Public, no authentication. Resources that include [Bazaar](https://www.x402.org/) metadata (v2 `extensions.bazaar` or v1 `outputSchema`) are automatically indexed when settlements succeed through our proxy.
+
+**Query parameters:**
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | 100 | Max items per page (1-100) |
+| `offset` | 0 | Pagination offset (max 10,000) |
+| `type` | `http` | Resource type (only `http` is currently supported) |
+
+**Response (`200`):**
+
+```json
+{
+  "x402Version": 1,
+  "items": [
+    {
+      "resource": "https://think.agentutil.net/v1/expand",
+      "type": "http",
+      "x402Version": 2,
+      "accepts": [{ "scheme": "exact", "network": "eip155:8453", "..." : "..." }],
+      "lastUpdated": "2026-02-27T02:16:30.433Z",
+      "metadata": {
+        "bazaar": {
+          "info": { "input": { "type": "http", "method": "POST" }, "..." : "..." },
+          "schema": { "..." : "..." }
+        }
+      }
+    },
+    {
+      "resource": "https://example.com/api/data",
+      "type": "http",
+      "x402Version": 1,
+      "accepts": [{ "scheme": "exact", "outputSchema": { "..." : "..." }, "..." : "..." }],
+      "lastUpdated": "2026-02-27T02:16:30.433Z",
+      "metadata": {}
+    }
+  ],
+  "pagination": { "limit": 100, "offset": 0, "total": 42 }
+}
+```
+
+- v2 resources include `metadata.bazaar` with full Bazaar `info` and `schema`
+- v1 resources have `metadata: {}` (discovery data lives in `accepts[].outputSchema`)
+- Responses are cached for 5 minutes
+- Resources not seen in 90 days are automatically removed
+
+## Agent API
+
+For AI agents that provision their own endpoints via USDC payment. See [Agent Self-Provisioning](/integration/agent) for full documentation.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/agent/purchase` | None | Returns `402` with payment requirements |
+| `POST` | `/api/v1/agent/purchase` | `X-PAYMENT` header | Purchase credits, returns API key + endpoint |
+| `GET` | `/api/v1/agent/balance` | SIWE | Returns credit balance and usage |
+| `PATCH` | `/api/v1/agent/config` | SIWE | Configure allowed networks, history opt-out |
+| `GET` | `/api/v1/agent/history` | SIWE | Agent settlement history (owner-scoped) |
+
+## Authentication
+
+### JWT (merchant endpoints)
+
+Merchant endpoints (`/api/me/...`) require a JWT in the `Authorization` header:
+
+```
+Authorization: Bearer <JWT>
+```
+
+JWTs are issued by Auth0 when you sign in at [renvoy.ai](https://renvoy.ai). The dashboard handles this automatically. If you're calling merchant endpoints programmatically, use the JWT from your authenticated session.
+
+### SIWE (payer and agent endpoints)
+
+Payer and agent endpoints accept [SIWE (Sign-In with Ethereum)](https://eips.ethereum.org/EIPS/eip-4361) authentication via headers:
+
+```
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+The SIWE message must have a `domain` matching `x402.renvoy.ai` and include an `expirationTime` (messages without expiry are rejected).
+
+Alternatively, you can obtain a short-lived session token via `POST /api/v1/auth/siwe` and use it as a Bearer token for subsequent requests. See [SIWE session tokens](#siwe-session-tokens) below.
+
+### `POST /api/v1/auth/siwe` {#siwe-session-tokens}
+
+Exchange SIWE credentials for a session token. This avoids repeating SIWE signature verification on every request.
+
+**Request:**
+
+```
+POST https://x402.renvoy.ai/api/v1/auth/siwe
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+No request body. The SIWE message and signature are sent in headers.
+
+**Response (`200`):**
+
+```json
+{
+  "token": "<session token>",
+  "wallet": "0xYourWallet",
+  "expires_at": 1710601200
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `token` | string | Opaque session token, valid for 15 minutes |
+| `wallet` | string | Normalized wallet address extracted from the SIWE message |
+| `expires_at` | number | Unix timestamp (seconds) when the token expires |
+
+Use the token as a Bearer token on subsequent requests:
+
+```
+GET https://x402.renvoy.ai/api/v1/history?limit=50
+Authorization: Bearer <token>
+```
+
+Rate limited to 5 requests per second per IP.
+
+## Settlement History
+
+Query settlement history for your account. All history endpoints return paginated results with opaque cursors.
+
+### Merchant history (JWT)
+
+```
+GET https://x402.renvoy.ai/api/me/history?limit=50&cursor=OPAQUE_CURSOR
+Authorization: Bearer <JWT>
+```
+
+Returns settlements for all API keys under your account. Query parameters: `limit` (1-100, default 50), `cursor` (opaque, from previous response), `direction` (`before` or `after`).
+
+**Response** (`200`):
+
+```json
+{
+  "settlements": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "success": true,
+      "tx_hash": "0xabc...",
+      "network": "eip155:8453",
+      "payer_amount": "100000",
+      "tenant_id": "uuid",
+      "payer": "0xClientAddress",
+      "resource": "https://api.example.com/data",
+      "pay_to": "0xMerchantAddress",
+      "plan": "growth",
+      "error_reason": null,
+      "agents": [
+        {
+          "token_id": "42",
+          "name": "Autonomous Trader",
+          "url": "https://www.8004scan.io/agents/base/42"
+        }
+      ]
+    }
+  ],
+  "cursor": "OPAQUE_CURSOR_FOR_NEXT_PAGE",
+  "has_more": true
+}
+```
+
+The `agents` array is present when the payer wallet holds [ERC-8004](/erc8004) agent NFTs. Each entry contains `token_id`, `name`, and a `url` linking to the agent's 8004scan profile. Omitted if no agents are detected.
+
+### Payer history (SIWE)
+
+```
+GET https://x402.renvoy.ai/api/v1/history?limit=50
+X-SIWE-Message: <base64-encoded SIWE message>
+X-SIWE-Signature: 0x<signature>
+```
+
+Returns settlements where the authenticated wallet was the payer. You can also use a [session token](#siwe-session-tokens) as a Bearer token instead of SIWE headers.
+
+### Admin history
+
+```
+GET https://x402.renvoy.ai/admin/history?owner_id=X&tenant_id=Y&payer=0x...&tx_hash=0x...&success=true
+```
+
+Requires admin auth. Supports all filters as query parameters.
+
+### Opt-out
+
+Tenants can disable settlement logging per API key:
+
+```
+PATCH https://x402.renvoy.ai/api/me/tenants/:id
+{ "history_enabled": false }
+```
+
+Or for agents via SIWE:
+
+```
+PATCH https://x402.renvoy.ai/api/v1/agent/config
+{ "history_enabled": false }
+```
+
+Set `history_enabled` to `true` (or omit it) to re-enable. History is enabled by default.
+
+## Analytics
+
+Aggregated analytics for your settlements. Returns summary metrics, daily time-series, top resources, error breakdown, and network distribution for a given time window.
+
+Analytics are derived from logged settlements. Keys with history disabled (`history_enabled: false`) are excluded from analytics data.
+
+### Merchant analytics (JWT)
+
+```
+GET https://x402.renvoy.ai/api/me/analytics?days=30
+Authorization: Bearer <JWT>
+```
+
+Query parameters: `days` (7, 30, or 90 — default 30).
+
+**Response** (`200`):
+
+```json
+{
+  "summary": {
+    "total_settlements": 142,
+    "successful_settlements": 135,
+    "failed_settlements": 7,
+    "success_rate": 0.9507,
+    "total_volume_atomic": "28500000",
+    "unique_payers": 23,
+    "prev_total_settlements": 98,
+    "prev_success_rate": 0.9388,
+    "prev_total_volume_atomic": "19200000",
+    "prev_unique_payers": 17
+  },
+  "timeseries": [
+    {
+      "date": "2026-03-01",
+      "success_count": 5,
+      "failed_count": 1,
+      "total_volume_atomic": "1200000"
+    }
+  ],
+  "top_resources": [
+    {
+      "resource": "https://api.example.com/data",
+      "pay_to": "0xMerchantAddress",
+      "network": "eip155:8453",
+      "settlement_count": 42,
+      "success_count": 40,
+      "total_volume_atomic": "8000000"
+    }
+  ],
+  "errors": [
+    { "error_reason": "insufficient_funds", "count": 4 },
+    { "error_reason": "unknown", "count": 3 }
+  ],
+  "networks": [
+    { "network": "eip155:8453", "count": 120, "total_volume_atomic": "24000000" },
+    { "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "count": 22, "total_volume_atomic": "4500000" }
+  ],
+  "period": {
+    "start_date": "2026-02-13",
+    "end_date": "2026-03-15",
+    "days": 30,
+    "timezone": "UTC"
+  }
+}
+```
+
+<Note>
+- All volume fields are in atomic USDC units (6 decimals). Divide by 1,000,000 for human-readable values.
+- `period.start_date` is inclusive, `period.end_date` is exclusive (today). Only completed UTC days are included — today's activity will appear tomorrow.
+- `prev_*` fields compare against the prior period of equal length. They are `null` when there are no settlements in the prior period.
+- `unique_payers` counts distinct known payer addresses. The same wallet on different networks counts once.
+- `timeseries` contains only days with activity. Zero-fill missing dates client-side using `start_date` (inclusive) to `end_date` (exclusive).
+</Note>
+
+### Admin analytics
+
+```
+GET https://x402.renvoy.ai/admin/analytics?days=30&owner_id=X&tenant_id=Y
+Authorization: Bearer <admin key>
+```
+
+Requires admin auth. Same response format as merchant analytics. Supports optional `owner_id` and `tenant_id` query parameters to scope results; omit both for platform-wide analytics.
+
+## Error responses
+
+All error responses return JSON with an `error` field:
+
+```json
+{ "error": "description of what went wrong" }
+```
+
+| Status | Description | When |
+|---|---|---|
+| `400` | Bad request | Malformed payload, payment below minimum |
+| `401` | Unauthorized | Invalid or missing API key, JWT, or SIWE credentials |
+| `402` | Payment required | Agent purchase endpoint (expected, contains payment requirements) |
+| `403` | Forbidden | Flash mode without Growth plan; network not allowed; flagged by KYT screening |
+| `409` | Conflict | Duplicate transaction (already processed) |
+| `413` | Payload too large | Request body exceeds limit (16 KB for `/settle` and `/verify`, 4 KB for other endpoints) |
+| `429` | Rate limit / quota exceeded | RPS exceeded, or settlement/verification quota exhausted |
+| `502` | Upstream error | Facilitator unreachable |
+| `503` | Service unavailable | Facilitator not configured; KYT screening unavailable |
+
+## Rate limit headers
+
+Metered responses include remaining quota in headers:
+
+```
+x-settlement-remaining: 847
+x-verification-remaining: 9231
+```
+
+When quota is exhausted, `429` responses include:
+
+```
+x-settlement-remaining: 0
+```
+
+or:
+
+```
+x-verification-remaining: 0
+```

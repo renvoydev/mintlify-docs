@@ -1,97 +1,62 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: Welcome
+description: Managed x402 facilitators for instant USDC payments over HTTP.
 ---
 
-## Setting up
+Renvoy gives you a hosted facilitator endpoint so you can add pay-per-request USDC payments to any API — no infrastructure to run, no keys to manage, no gas to fund.
 
-Get your documentation site up and running in minutes.
+Set a price on your endpoint. We handle the on-chain settlement.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+## Quick links
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="What is x402?" icon="circle-question" href="/what-is-x402">
+    Understand the protocol
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Getting Started" icon="rocket" href="/getting-started">
+    Try it right now (no signup)
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Server Integration" icon="server" href="/integration/server">
+    Add payments to my API
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Client Integration" icon="code" href="/integration/client">
+    Pay for an x402 API
   </Card>
-</Columns>
+  <Card title="Agent Self-Provisioning" icon="robot" href="/integration/agent">
+    Provision an endpoint programmatically
+  </Card>
+  <Card title="Plans & Pricing" icon="tags" href="/plans-and-pricing">
+    Compare plans
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference">
+    See all endpoints
+  </Card>
+</CardGroup>
 
-## Create beautiful pages
+## How it works
 
-Everything you need to create world-class documentation.
+```
+Client                     Your Server                  Renvoy
+  |                            |                            |
+  |-- GET /data -------------->|                            |
+  |<-- 402 + payment details --|                            |
+  |                            |                            |
+  |-- GET /data + X-PAYMENT -->|                            |
+  |                            |-- POST /settle ----------->|
+  |                            |<-- { success, tx } --------|
+  |<-- 200 + data -------------|                            |
+```
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Client requests a protected endpoint" />
+  <Step title="Server responds 402 Payment Required with price and payment address" />
+  <Step title="Client signs a USDC transfer and retries with the X-PAYMENT header" />
+  <Step title="Server forwards the payment to Renvoy, which settles it on-chain" />
+  <Step title="Server returns the data" />
+</Steps>
 
-## Need inspiration?
+The `@x402/express` middleware and `@x402/fetch` client handle steps 2-4 automatically.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Tip>
+**New here?** Start with [Getting Started](/getting-started) — you'll have a working payment flow in under 2 minutes.
+</Tip>

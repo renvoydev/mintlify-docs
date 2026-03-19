@@ -1,0 +1,42 @@
+---
+title: Why Use a Managed Facilitator?
+description: What it takes to self-host a facilitator vs. letting Renvoy handle it.
+---
+
+You *could* run your own facilitator. You could also run your own Ethereum node. Most people use Alchemy instead.
+
+## What it takes to self-host
+
+Running a facilitator means operating a production blockchain service:
+
+| Concern | What's involved |
+|---|---|
+| **Infrastructure** | Deploy and maintain a Rust binary, handle TLS, uptime monitoring, auto-restart |
+| **Signer key management** | Generate keys, store them securely, rotate periodically, handle compromise scenarios |
+| **Nonce coordination** | Multiple concurrent settlements can't reuse nonces — requires sequencing or nonce pools |
+| **Gas funding** | Facilitator wallets need ETH for gas; monitor balances, auto-fund, sweep excess |
+| **RPC reliability** | Primary RPC goes down? You need fallback RPCs with automatic failover |
+| **Scaling** | More tenants = more concurrent settlements = more signers = more gas management |
+| **Rebalancing** | Distribute gas across signer wallets, drain inactive ones, handle L1 data fees |
+
+## What we handle
+
+Renvoy runs all of this as a managed service:
+
+- **Multi-signer pool** — multiple signer wallets per instance, nonce coordination handled automatically
+- **Automatic gas funding** — we monitor balances and rebalance across signers
+- **RPC fallback** — ordered failover across multiple RPC providers
+- **Key rotation** — periodic signer key rotation with zero-downtime grace periods
+- **Rate limiting** — per-tenant RPS limits protect against abuse
+- **Usage metering** — track settlements and verifications per billing period
+- **KYT (Know Your Transaction)** — every settlement is screened before reaching the chain
+- **Flashblocks** — ~200ms settlement on Growth and Enterprise plans (vs ~2s standard)
+- **Edge routing** — Cloudflare Workers route requests to the nearest facilitator instance
+
+## The tradeoff
+
+You set the price. We handle the settlement.
+
+Your server keeps full control over *what* to charge for, *how much* to charge, and *who* gets access. The facilitator only handles the payment mechanics.
+
+Ready to start? See [Getting Started](/getting-started).

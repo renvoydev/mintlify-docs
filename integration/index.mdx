@@ -1,0 +1,57 @@
+---
+title: Integration
+description: Three ways to integrate with Renvoy, depending on what you're building.
+---
+
+<CardGroup cols={3}>
+  <Card title="Server Integration" icon="server" href="/integration/server">
+    Adding payment requirements to your API
+  </Card>
+  <Card title="Client Integration" icon="code" href="/integration/client">
+    Paying for x402-protected APIs
+  </Card>
+  <Card title="Agent Self-Provisioning" icon="robot" href="/integration/agent">
+    An AI agent that needs a facilitator endpoint
+  </Card>
+</CardGroup>
+
+## Base URL
+
+All requests go through:
+
+```
+https://x402.renvoy.ai
+```
+
+## Path prefixes
+
+The path prefix determines authentication and tier routing:
+
+| Prefix | Auth | Network | Use case |
+|---|---|---|---|
+| `/sandbox/...` | None (IP-limited) | Base Sepolia, Solana Devnet | Development and testing |
+| `/v1/<key>/...` | API key | Base + Sepolia, Solana | Production |
+| `/v1/<key>/flash/...` | API key | Base + Sepolia, Solana | ~200ms settlement (Growth+). On Base, uses Flashblocks for ~200ms finality. Solana achieves comparable speed natively. |
+
+## Facilitator URL in your server config
+
+Your server needs a facilitator URL. This is what you pass to `HTTPFacilitatorClient`:
+
+```typescript
+// Sandbox (free, testnet)
+const facilitator = new HTTPFacilitatorClient({
+  url: "https://x402.renvoy.ai/sandbox",
+});
+
+// Production (with API key)
+const facilitator = new HTTPFacilitatorClient({
+  url: "https://x402.renvoy.ai/v1/YOUR_API_KEY",
+});
+```
+
+The facilitator exposes two core endpoints at this base URL:
+
+- `POST /settle` — settle a payment on-chain
+- `POST /verify` — verify a payment signature without settling
+
+The `@x402/express` middleware calls these automatically.

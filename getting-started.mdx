@@ -1,0 +1,129 @@
+---
+title: Getting Started
+description: Go from zero to a working x402 payment in under 2 minutes.
+---
+
+No signup required.
+
+## 1. Try the sandbox
+
+The sandbox facilitator is free, requires no API key, and runs on Base Sepolia and Solana Devnet (testnets).
+
+```
+https://x402.renvoy.ai/sandbox
+```
+
+You can point any x402-compatible server at this URL immediately.
+
+## 2. Add payments to your server
+
+Install the Express middleware:
+
+```bash
+npm install @x402/express @x402/evm @x402/core
+```
+
+Create a server with a paid endpoint:
+
+```typescript
+import express from "express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+
+const app = express();
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: "https://x402.renvoy.ai/sandbox",
+});
+
+app.use(
+  paymentMiddleware(
+    {
+      "GET /weather": {
+        accepts: [
+          {
+            scheme: "exact",
+            price: "$0.001",
+            network: "eip155:84532",       // Base Sepolia
+            payTo: "0xYOUR_WALLET_ADDRESS", // receives USDC
+          },
+        ],
+        description: "Weather data",
+        mimeType: "application/json",
+      },
+    },
+    new x402ResourceServer(facilitatorClient)
+      .register("eip155:84532", new ExactEvmScheme()),
+  ),
+);
+
+app.get("/weather", (req, res) => {
+  res.json({ weather: "sunny", temperature: 70 });
+});
+
+app.listen(4021);
+```
+
+Test it:
+
+```bash
+curl -i http://localhost:4021/weather
+# Returns 402 Payment Required with payment details
+```
+
+## 3. Pay with a client
+
+Install the fetch wrapper:
+
+```bash
+npm install @x402/fetch @x402/evm viem
+```
+
+```typescript
+import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
+
+const signer = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
+const client = new x402Client();
+registerExactEvmScheme(client, { signer });
+
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+const response = await fetchWithPayment("http://localhost:4021/weather");
+const data = await response.json();
+console.log(data); // { weather: "sunny", temperature: 70 }
+```
+
+The client wallet needs USDC on the target network. Get testnet USDC from the [Circle faucet](https://faucet.circle.com/) (supports both Base Sepolia and Solana Devnet).
+
+## 4. Go to production
+
+When you're ready for mainnet:
+
+1. Sign up at [renvoy.ai](https://renvoy.ai)
+2. Get your API key from the dashboard
+3. Swap the facilitator URL:
+
+```diff
+- url: "https://x402.renvoy.ai/sandbox"
++ url: "https://x402.renvoy.ai/v1/YOUR_API_KEY"
+```
+
+4. Change the network to mainnet:
+
+```diff
+- network: "eip155:84532",  // Base Sepolia
++ network: "eip155:8453",   // Base mainnet
+```
+
+Or for Solana:
+
+```diff
+- network: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",  // Solana Devnet
++ network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",   // Solana mainnet
+```
+
+That's it. Same code, real payments.
+
+See [Plans & Pricing](/plans-and-pricing) to choose a plan, or jump to the [Integration Guide](/integration/index) for framework-specific details.
