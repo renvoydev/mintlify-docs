@@ -195,7 +195,9 @@ The SIWE message must have a `domain` matching `x402.renvoy.ai` and include an `
 
 Alternatively, you can obtain a short-lived session token via `POST /api/v1/auth/siwe` and use it as a Bearer token for subsequent requests. See [SIWE session tokens](#siwe-session-tokens) below.
 
-### `POST /api/v1/auth/siwe` {#siwe-session-tokens}
+### SIWE session tokens
+
+`POST /api/v1/auth/siwe`
 
 Exchange SIWE credentials for a session token. This avoids repeating SIWE signature verification on every request.
 
